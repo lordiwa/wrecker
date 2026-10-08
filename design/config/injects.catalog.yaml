@@ -1,0 +1,31 @@
+# Catálogo de eventos del Director. Se consumen en orden de aplicabilidad al estado.
+# Cada evento: name, family, applies_when (condición sobre world), effect (delta sobre world).
+injects:
+  - name: third_party_down
+    family: terceros
+    applies_when: { world.pending_external_call: true }
+    effect: { world.external_status: "unavailable" }
+  - name: session_expired
+    family: sesion
+    applies_when: { world.session_active: true }
+    effect: { world.session_active: false }
+  - name: clock_skew_forward
+    family: tiempo
+    applies_when: {}
+    effect: { world.clock_offset_s: 3600 }
+  - name: quota_exhausted
+    family: limites
+    applies_when: { world.quota_remaining: ">0" }
+    effect: { world.quota_remaining: 0 }
+  - name: partial_network
+    family: red
+    applies_when: {}
+    effect: { world.network: "degraded", world.latency_ms: 4000 }
+  - name: malformed_upstream_payload
+    family: datos
+    applies_when: { world.pending_external_call: true }
+    effect: { world.external_payload: "malformed" }
+  - name: concurrent_editor
+    family: concurrencia
+    applies_when: { world.editing_resource: "*" }
+    effect: { world.concurrent_writer: true }

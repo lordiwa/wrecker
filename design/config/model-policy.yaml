@@ -1,0 +1,41 @@
+
+levels:
+  cheap:
+    preferences: { costPriority: 1.0, speedPriority: 0.8, intelligencePriority: 0.1 }
+    hints: ["claude-opus-4-8"]
+    max_tokens_default: 1000
+    thinking_headroom_tokens: 600
+    batch_api: true
+    allowed_in_turn_loop: true
+  medium:
+    preferences: { costPriority: 0.5, speedPriority: 0.4, intelligencePriority: 0.6 }
+    hints: ["claude-opus-4-8"]
+    max_tokens_default: 4000
+    thinking_headroom_tokens: 1200
+    batch_api: true
+    allowed_in_turn_loop: true
+  strong:
+    preferences: { costPriority: 0.1, speedPriority: 0.1, intelligencePriority: 1.0 }
+    hints: ["claude-opus-4-8"]
+    max_tokens_default: 8000
+    thinking_headroom_tokens: 0
+    max_input_tokens: 40000
+    batch_api: false
+    allowed_in_turn_loop: false
+    max_calls_per_session: 1
+    max_session_tokens: 50000
+
+prompt_cache:
+  enabled: true
+  prefix_parts: [rules, output_format]
+  min_prefix_tokens: 1024
+
+thresholds:
+  azul_similarity: 0.286
+  echo_similarity: 0.5
+  arbiter_cheap_confidence: 0.75
+  arbiter_batch_size: 10
+
+alarms:
+  medium_rung_rate_max: 0.10
+  azul_call_rate_max: 0.50

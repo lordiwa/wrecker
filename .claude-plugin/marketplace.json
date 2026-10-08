@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "wrecker-marketplace",
+  "owner": {
+    "name": "Rafael Matovelle"
+  },
+  "description": "Distribution marketplace for Wrecker.",
+  "plugins": [
+    {
+      "name": "wrecker",
+      "source": "./",
+      "description": "Wrecker: adversarial wargaming over MCP. Attacks a structured use case to find counterexamples, gaps and dead ends, spending as few tokens as possible.",
+      "version": "0.1.0"
+    }
+  ]
+}
