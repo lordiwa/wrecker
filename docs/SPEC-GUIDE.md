@@ -1,7 +1,7 @@
 # Writing a Wrecker spec
 
-Wrecker attacks a use-case spec: it plays many action sequences against it and reports where the spec
-has a gap, a dead end, a contradiction or a counterexample. You (or your AI) write the spec; Wrecker
+Wrecker plays many action sequences against a use-case spec and reports its gaps, dead ends,
+contradictions and counterexamples. You (or your AI) write the spec; Wrecker
 checks it with `wargame_lint_spec` (free) and attacks it with `wargame_dry_run` (free). Every error
 names the line or field, what was expected, and the section of this guide to read.
 
@@ -20,9 +20,11 @@ id: UC-LOGIN
 ## Exception flows
 ```
 
-Body sections are recognised by heading: `## Main flow`, `## Alternate flows`, `## Exception flows`.
-Any other `##` section (notes, referenced states) is ignored. Older specs use Spanish keywords; they
+Only those three `##` headings are read; any other section (notes, referenced states) is ignored. Older specs use Spanish keywords; they
 parse the same as the English ones in this guide.
+
+A live run also needs the actions' translation, `<id>.runner.json` (browser) or `<id>.translation.json`
+(http): put it next to the spec or in `design/anchors/` of its project, or pass `translation_path`.
 
 ## Header
 
@@ -37,10 +39,9 @@ Required:
 Optional:
 - `level` (default `user_goal`), `scope`, `trigger`, `preconditions` (list of text): context for the
   model roles and the report.
-- `fog`: see Fog.
-- `initial_world`: see World and paths.
 - `referenced_states`: list of every world path a `requires` or `applies_when` reads (lint checks it).
-- `injects`: see Injects.
+- `fog` (see Fog), `initial_world` (World and paths), `injects` (Injects), `same_ui_action` (Steps),
+  `no_action_after_end` (Ends).
 
 ## Fog
 
@@ -48,8 +49,7 @@ Optional:
 whole numbers 1 to 4; the default is 3. Fields: `id`, `name`, `actor`, `level`, `scope`,
 `spec_version`, `trigger`, `preconditions`, `main_flow`, `alternate_flows`, `exception_flows`,
 `referenced_states`, `initial_world`, `injects`, `success_postcondition`, `failure_postcondition`.
-Attackers see less or more of the spec: the naive player sees fog 1, the expert 2, the integrator 3
-and the adversary 4. Hide what a real user would not know.
+The naive player sees fog 1, the expert 2, the integrator 3 and the adversary 4. Hide what a real user would not know.
 
 ## World and paths
 
@@ -86,6 +86,8 @@ One line per step, then its keywords indented under it:
 
 - Step id: a number, plus a letter and number inside flows (`2a1`). Each id appears once.
 - `[action_token]`: lowercase snake_case, unique per step. Tokens are the moves a play can make.
+  One real button that ends two steps gets two tokens plus a header group
+  `same_ui_action: [[click_pay, pay_default]]`: trying one where another is allowed is not a gap.
 - `Actor:` then free text.
 - `requires`: the condition under which the step may run. When it does not hold the step does not run,
   and if no flow anchored at that step covers the case, Wrecker reports a gap.
@@ -118,7 +120,8 @@ Alternate and exception flows branch from a step of any flow:
 
 `end_success` and `end_failure` are the two ends. Reaching `end_success` without
 `success_postcondition` holding (or `end_failure` without `failure_postcondition`) is a
-counterexample. From every step some end must be reachable.
+counterexample. From every step some end must be reachable. `no_action_after_end: true` (header):
+the actor cannot act after an end, so actions tried after one are not gaps.
 
 ## Injects
 
@@ -132,25 +135,25 @@ injects:
     effect: { signed_in: false }
 ```
 
-`name` identifies it in findings; `family` is a free label that groups related faults (two injects
-of the same family may also be tried together); `applies_when` says when it can fire; `effect`
-changes the world (see Effects).
+`name` identifies it in findings; `family` groups related faults (two of one family may be tried
+together); `applies_when` says when it can fire; `effect` changes the world (see Effects).
 
 ## Lint checks
 
 `wargame_lint_spec` reports: a `goto` or `anchor` to a missing step; a flow with no steps or whose last
 step has no `goto`; an exception without `recovery`; a condition path missing from `referenced_states`
 or set by nothing (no effect, inject or top-level `initial_world` key); a step from which no end is
-reachable; one action token on two steps. Fix them all before `wargame_dry_run`.
+reachable; one action token on two steps; a `same_ui_action` group with an unknown or lone token.
+Fix them all before `wargame_dry_run`.
 
 ## Example
 
 A minimal sign-in use case: signing in works, a wrong password shows an error, and the fifth wrong
 password in a row locks the account. It passes `wargame_lint_spec` with no findings.
-`wargame_dry_run` still reports `gap` candidates on it: that is normal, they are questions for the
-spec owner (what happens if the actor does X here?). Also read the coverage and `steps_never_reached`
-of the run: they name paths the attacker never reached, and `never_fired_why` says for each one what
-its condition needs (for example `needs failed_attempts == 4; no play got there`). On this example
+`wargame_dry_run` still reports `gap` candidates on it: normal, they are questions for the spec owner
+(what happens if the actor does X here?). In the run, `steps_never_reached` names paths the attacker
+never reached and `never_fired_why` what each one's condition needs (e.g.
+`needs failed_attempts == 4; no play got there`). On this example
 every transition fires, the lockout step 2b1 included: the attacker repeats the wrong-password loop
 until the counter condition holds.
 

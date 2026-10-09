@@ -10,7 +10,7 @@
       "name": "wrecker",
       "source": "./",
       "description": "Wrecker: adversarial wargaming over MCP. Attacks a structured use case to find counterexamples, gaps and dead ends, spending as few tokens as possible.",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   ]
 }

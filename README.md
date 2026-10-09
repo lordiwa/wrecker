@@ -62,6 +62,28 @@ order). Ask Claude Code:
 For your own use case, call `wargame_spec_guide`, write the spec, and pass its
 path (relative to your project, or absolute) as `spec_path`.
 
+## The `/wrecker:wargame` skill
+
+Hand it your approved use cases as plain text and it does the rest: it writes
+one spec per use case under `design/wargame/`, lints each one to zero problems,
+attacks it, and returns one JSON summary.
+
+```
+/wrecker:wargame mode: short seed: 7 <your approved use cases>
+```
+
+- `mode: short` (quick check) runs the free dry run only. `mode: full` (the
+  default) also runs a model session when the dry run leaves paths uncovered,
+  and the live anchor when you pass `target: <url>`.
+- Each finding has a stable `id` that stays the same on a re-run of the same
+  spec. `mapping.blocking` lists counterexamples, contradictions and dead ends;
+  `mapping.questions` lists gaps (questions for the spec owner).
+- A spec is reused while the use-case text is unchanged; when the text changes
+  the spec is rewritten under a new `spec_version`, and old ids no longer apply.
+- If the Wrecker tools are not connected it says `WRECKER_NOT_CONNECTED` with
+  the install commands. A spec that cannot be linted clean is reported as
+  `LINT_FAILED` and is not attacked.
+
 ## Where results go
 
 Runs are written under `out/<session-id>/` in the plugin's data folder
