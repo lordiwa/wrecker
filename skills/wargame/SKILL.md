@@ -44,7 +44,8 @@ yourself. Print exactly this JSON and nothing else:
 After this check, if any Wrecker tool call fails, errors or is denied, or a Write or Edit of a
 spec file fails or is denied, do not retry it with other arguments or another tool and do not
 fill in its result: that spec's entry gets `"error":"TOOL_FAILED"` and `"message"` with the tool
-name and the error text as returned, and you go on with the next one.
+name and the error text as returned, and you go on with the next one. The one exception is a
+failed resume call (step 4): it keeps the partial result instead.
 
 ## 2. One spec per use case: reuse it when the use case did not change
 
@@ -84,12 +85,31 @@ its `spec_version`. If it still fails, do not attack that use case: record it wi
 
 ## 4. Attack
 
+A time or memory limit can cut a `wargame_dry_run` or `wargame_run_session` call. Resume it,
+bounded, after every such call:
+- `status.finished` is `true`: done.
+- `status.finished` is `false` and `status.continue_with` is present: call the same tool with ONLY
+  `resume_session_id` (the call `continue_with` names; pass nothing else). Repeat while it is still
+  cut: at most 3 resumes for the dry run, and at most 3 for the model session.
+  Count them.
+- `status.finished` is `false` and no `continue_with`: it cannot be resumed; do not retry.
+- A resume call that fails, errors or is denied: do not retry it. Keep the last response you have
+  (unfinished, with its `continue_with`) and add `"resume failed: <tool>: <error text as returned>"`
+  to that spec's `not_running`. This is not `TOOL_FAILED`.
+The result of a call is its LAST response: `session_id`, findings, coverage, `paths_attacked`,
+`not_running`, `finished`, `stop_reason`, `guard` and `continue_with` all come from it, never from a
+cut one.
+
 For each spec that passed lint:
-1. `wargame_dry_run` with `spec_path` and `random_seed: <seed>`. Free, no model.
+1. `wargame_dry_run` with `spec_path` and `random_seed: <seed>`, resumed as above. Free, no model.
 2. `mode: short` stops here: no `wargame_run_session`, no live anchor. Add
    `"model session skipped: short mode"` to that spec's `not_running`, and one line
    `"path <id or name> not attacked: short mode"` for each `# dropped in short mode:` line.
-3. `mode: full`: call `wargame_run_session` (same `spec_path` and `random_seed`) only if
+3. `mode: full` and the dry run did not finish (`finished` still `false` after its resumes): no
+   `wargame_run_session`. Add `"model session skipped: the dry run did not finish"` to that spec's
+   `not_running` and report the dry run.
+4. `mode: full`, dry run finished: call `wargame_run_session` (same `spec_path` and `random_seed`,
+   resumed as above) only if
    - the dry run's `status.coverage.transitions.pct` is below 100, or
    - `target` was given and `design/anchors/<UC-id>.runner.json` (then `anchor:
      {"mode":"live","adapter":"runner","target":<target>}`) or
@@ -98,18 +118,25 @@ For each spec that passed lint:
    Otherwise skip it and add `"model session skipped: the dry run covered every transition"` to that
    spec's `not_running`. A target with no anchor file adds `"live anchor skipped: no
    design/anchors/<UC-id>.runner.json or .translation.json"`.
-   When the session ran, report its result (its `session_id`, coverage and findings) and keep the
-   dry run's id in `dry_run_session_id`.
+   When the session ran, report its result (its `session_id`, coverage, findings and `resumes`) and
+   keep the dry run's id in `dry_run_session_id` and its resume count in `dry_run_resumes`.
 
 ## 5. Build the JSON from the tool output (never invent fields)
 
-Copy values from the tool results; do not compute or guess them.
+Copy values from the tool results; do not compute or guess them. The only values you count
+yourself are `resumes`, `dry_run_resumes` and `reused`.
 - `version`: `status.version.version` of the run (fall back to `status.version.sha`).
 - `random_seed`: `status.random_seed`. `mode`: the mode you ran.
 - Per spec: `spec_version` from the spec, `spec_sha256` (= `status.spec_sha256`, a hash of the spec
   file as attacked), `reused` (`true` when step 2.1 applied), `session_id`, `coverage`
   (= `status.coverage`), `paths_attacked` (= `status.paths_attacked`), `not_running`
-  (= `status.not_running` plus your skip lines).
+  (= `status.not_running` plus your skip lines), `finished` (= `status.finished`), `stop_reason`
+  (= `status.stop_reason`), `resumes` (resume calls of the call this entry reports: the model
+  session when it ran, else the dry run; `0` if none; never a sum of both). When the
+  model session ran, also `dry_run_session_id` and `dry_run_resumes` (resume calls of the dry run).
+  When `finished` is `false`, also `guard` (= `status.guard`) and `continue_with`
+  (= `status.continue_with`, `null` when absent). Copy `finished` and `stop_reason`; never infer
+  them from `not_running`.
   In `paths_attacked`, `reached` means every step of that flow was executed by at least one play;
   `attacked` means at least one play executed or tried one of its steps.
 - Per finding entry of the summary: `id` = its `stable_id`; `type`, `plausibility`, `verified`,
@@ -127,14 +154,24 @@ is missing now as resolved.
 
 Your final message is exactly one JSON object, no prose and no code fence:
 
-{"engine":"wrecker","version":"0.2.0","mode":"short","random_seed":7,
+{"engine":"wrecker","version":"0.2.1","mode":"short","random_seed":7,
  "specs":[{"uc":"UC-1","spec_path":"design/wargame/UC-1.short.md","spec_version":"UC-1-v1",
    "spec_sha256":"<64 hex>","reused":false,"session_id":"S-UC-1-7-r1","coverage":{...},
-   "paths_attacked":[...],"not_running":[...],
+   "paths_attacked":[...],"not_running":[...],"finished":true,"stop_reason":"saturation","resumes":1,
    "findings":[{"id":"W-UC-1-0123456789ab","type":"gap","plausibility":"medium","verified":false,
-     "explanation":"...","step_cited":"2","folded_ids":["W-UC-1-0123456789ab","W-UC-1-ba9876543210"]}]}],
+     "explanation":"...","step_cited":"2","folded_ids":["W-UC-1-0123456789ab","W-UC-1-ba9876543210"]}]},
+  {"uc":"UC-2","spec_path":"design/wargame/UC-2.short.md","spec_version":"UC-2-v1",
+   "spec_sha256":"<64 hex>","reused":true,"session_id":"S-UC-2-7-r1","coverage":{...},
+   "paths_attacked":[...],"not_running":[...],"finished":false,"stop_reason":"limit","resumes":3,
+   "guard":{...},"continue_with":"wargame_dry_run({\"resume_session_id\": \"S-UC-2-7-r1\"})",
+   "findings":[]}],
  "mapping":{"blocking":[],"questions":["W-UC-1-0123456789ab","W-UC-1-ba9876543210"]}}
 
 A use case that failed lint appears in `specs` as
 `{"uc":...,"spec_path":...,"error":"LINT_FAILED","problems":[...],"findings":[]}`, and one whose
 tool call failed as `{"uc":...,"spec_path":...,"error":"TOOL_FAILED","message":"...","findings":[]}`.
+In `mode: full`, an entry whose model session ran reports that session and adds the dry run's
+id and resume count:
+`...,"session_id":"S-UC-1-7-r2","resumes":0,"dry_run_session_id":"S-UC-1-7-r1","dry_run_resumes":2,...`.
+An entry with no `error` key was linted clean and attacked; its `finished` says whether the attack
+ran to the end.
